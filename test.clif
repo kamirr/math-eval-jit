@@ -1,0 +1,17 @@
+function u0:0(f32, f32, f32, f32, f32, f32, i64, i64) -> f32 system_v {
+    sig0 = (f32) -> f32 system_v
+    sig1 = (f32) -> f32 system_v
+    sig2 = (f32, f32) -> f32 system_v
+    fn0 = u0:1 sig0
+    fn1 = u0:2 sig1
+    fn2 = u0:3 sig2
+
+block0(v0: f32, v1: f32, v2: f32, v3: f32, v4: f32, v5: f32, v6: i64, v7: i64):
+    v10 = f32const 0x1.921fb6p1
+    v11 = f32const 0x1.000000p1
+    v12 = fdiv v10, v11  ; v10 = 0x1.921fb6p1, v11 = 0x1.000000p1
+    store v12, v7
+    v13 = fadd v0, v12
+    v14 = call fn0(v13)
+    return v14
+}
