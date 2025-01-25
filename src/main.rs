@@ -1,4 +1,6 @@
-use math_eval_jit::{library::Library, rpn, Compiler};
+use std::{hint, time::Instant};
+
+use math_eval_jit::{library::Library, rpn::Program, Compiler};
 
 fn test(
     func: fn(f32, f32, f32, f32, f32, f32, &mut f32, &mut f32) -> f32,
@@ -17,11 +19,11 @@ fn test(
 }
 
 fn bench(func: fn(f32, f32, f32, f32, f32, f32, &mut f32, &mut f32) -> f32) {
-    let start = std::time::Instant::now();
+    let start = Instant::now();
     let mut sig1 = 0.5f32;
     let mut sig2 = 0.0f32;
     for _ in 0..44100 {
-        std::hint::black_box(func(2.0, 3.0, 0.0, 0.0, 0.0, 0.0, &mut sig1, &mut sig2));
+        hint::black_box(func(2.0, 3.0, 0.0, 0.0, 0.0, 0.0, &mut sig1, &mut sig2));
     }
     let elapsed = start.elapsed().as_secs_f32();
 
@@ -29,11 +31,11 @@ fn bench(func: fn(f32, f32, f32, f32, f32, f32, &mut f32, &mut f32) -> f32) {
 }
 
 fn main() {
-    let expr = "sin(sin(in1) + pi/4)";
+    let expr = "sin(sin(in1) + in2 * (pi/4))";
 
     println!("expression: {expr}");
 
-    let mut program = rpn::Program::parse_from_infix(expr).unwrap();
+    let mut program = Program::parse_from_infix(expr).unwrap();
 
     println!("parsed: {program:?}");
     program.propagate_constants();
@@ -43,6 +45,6 @@ fn main() {
     let mut compiler = Compiler::new(&library).unwrap();
     let func = compiler.compile(&program).unwrap();
 
-    test(func, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    test(func, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
     bench(func);
 }

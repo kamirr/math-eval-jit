@@ -1,10 +1,20 @@
+//! Management of functions accessible to programs
+
+/// Description of a function accessible to the compiled program
+///
+/// Currently only functions of the form `fn(f32, [f32, ..]) -> f32` are
+/// supported.
 pub struct FunctionF32 {
+    /// Name of the function exposed to the program
     pub name: String,
+    /// Pointer to the function
     pub(crate) ptr: *const u8,
+    /// Number of arguments of the function
     pub(crate) param_count: usize,
 }
 
 impl FunctionF32 {
+    /// Constructs a new instance of 1-argument [`FunctionF32`]
     pub fn new_1(name: String, ptr: extern "C" fn(f32) -> f32) -> Self {
         FunctionF32 {
             name,
@@ -13,6 +23,7 @@ impl FunctionF32 {
         }
     }
 
+    /// Constructs a new instance of 2-argument [`FunctionF32`]
     pub fn new_2(name: String, ptr: extern "C" fn(f32, f32) -> f32) -> Self {
         FunctionF32 {
             name,
@@ -22,20 +33,27 @@ impl FunctionF32 {
     }
 }
 
+/// Library of functions accessible to the program
 pub struct Library {
     funs: Vec<FunctionF32>,
 }
 
 impl Library {
+    /// Append a new function to the library
     pub fn insert(&mut self, fun: FunctionF32) {
         self.funs.push(fun);
     }
 
+    /// Iterator over the functions
     pub fn iter(&self) -> impl Iterator<Item = &'_ FunctionF32> {
         self.funs.iter()
     }
 }
 
+/// Default implementation of the library
+///
+/// Provider `sin(x)`, `cos(x)` and `pow(a, b)`, as those functions are
+/// accessible to all programs.
 impl Default for Library {
     fn default() -> Self {
         extern "C" fn sin_(x: f32) -> f32 {

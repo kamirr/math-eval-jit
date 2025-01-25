@@ -2,10 +2,7 @@ pub mod error;
 pub mod library;
 pub mod rpn;
 
-use std::{
-    collections::HashMap,
-    f32::consts::{E, PI},
-};
+use std::collections::HashMap;
 
 use cranelift::prelude::{
     types::F32, AbiParam, Configurable, FunctionBuilder, FunctionBuilderContext, InstBuilder,
@@ -106,7 +103,6 @@ impl Compiler {
 
         let mut builder = FunctionBuilder::new(&mut self.module_ctx.func, &mut self.builder_ctx);
 
-        // COMPILE FN
         let block = builder.create_block();
         builder.seal_block(block);
 
@@ -128,7 +124,6 @@ impl Compiler {
             let mut tmp = HashMap::new();
             for (name, sig) in &self.fun_sigs {
                 let callee = self.module.declare_function(&name, Linkage::Import, &sig)?;
-
                 let fun_ref = self.module.declare_func_in_func(callee, builder.func);
 
                 tmp.insert(name.as_str(), fun_ref);
@@ -144,7 +139,7 @@ impl Compiler {
 
             match token {
                 Token::Push(v) => {
-                    let val = builder.ins().f32const(*v as f32);
+                    let val = builder.ins().f32const(v.value());
 
                     stack.push(val);
                 }
@@ -164,9 +159,6 @@ impl Compiler {
                         Var::Sig2 => *v_sig2_rd.get_or_insert_with(|| {
                             builder.ins().load(F32, MemFlags::new(), v_sig2, 0)
                         }),
-                        // consts
-                        Var::Pi => builder.ins().f32const(PI),
-                        Var::E => builder.ins().f32const(E),
                     };
 
                     stack.push(val);
