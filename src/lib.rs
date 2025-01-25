@@ -235,8 +235,6 @@ impl Compiler {
         builder.ins().return_(&[read_ret]);
         builder.finalize();
 
-        println!("{}", self.module_ctx.func.display());
-
         self.module.define_function(id, &mut self.module_ctx)?;
 
         self.module.clear_context(&mut self.module_ctx);
@@ -251,6 +249,15 @@ impl Compiler {
         };
 
         Ok(func)
+    }
+
+    /// Free the functions built by this [`Compiler`]
+    ///
+    /// SAFETY:
+    /// - None of the function pointers returned from this compiler can run
+    ///   at the moment this function is called or ever called again.
+    pub unsafe fn free_memory(self) {
+        self.module.free_memory();
     }
 }
 
