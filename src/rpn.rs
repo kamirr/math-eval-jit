@@ -54,12 +54,12 @@ impl Value {
 /// Readable variables
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Var {
-    In1,
-    In2,
-    Alpha,
-    Beta,
-    Delta,
-    Gamma,
+    X,
+    Y,
+    A,
+    B,
+    C,
+    D,
     Sig1,
     Sig2,
 }
@@ -123,22 +123,19 @@ impl Program {
             use meval::tokenizer::Operation as MevalOp;
             use meval::tokenizer::Token as MevalToken;
             let token = match meval_token {
-                MevalToken::Var(name) => {
-                    let name = name.to_ascii_lowercase();
-                    match name.as_str() {
-                        "in1" => Token::PushVar(Var::In1),
-                        "in2" => Token::PushVar(Var::In2),
-                        "alpha" => Token::PushVar(Var::Alpha),
-                        "beta" => Token::PushVar(Var::Beta),
-                        "delta" => Token::PushVar(Var::Delta),
-                        "gamma" => Token::PushVar(Var::Gamma),
-                        "sig1" => Token::PushVar(Var::Sig1),
-                        "sig2" => Token::PushVar(Var::Sig2),
-                        "pi" => Token::Push(Value::Pi),
-                        "e" => Token::Push(Value::E),
-                        _ => return Err(JitError::ParseUnknownVariable(name.to_string())),
-                    }
-                }
+                MevalToken::Var(name) => match name.as_str() {
+                    "x" => Token::PushVar(Var::X),
+                    "y" => Token::PushVar(Var::Y),
+                    "a" => Token::PushVar(Var::A),
+                    "b" => Token::PushVar(Var::B),
+                    "c" => Token::PushVar(Var::C),
+                    "d" => Token::PushVar(Var::D),
+                    "sig1" => Token::PushVar(Var::Sig1),
+                    "sig2" => Token::PushVar(Var::Sig2),
+                    "pi" => Token::Push(Value::Pi),
+                    "e" => Token::Push(Value::E),
+                    _ => return Err(JitError::ParseUnknownVariable(name.to_string())),
+                },
                 MevalToken::Number(f) => Token::Push(Value::Literal(f as f32)),
                 MevalToken::Binary(op) => match op {
                     MevalOp::Plus => Token::Binop(Binop::Add),

@@ -4,16 +4,16 @@ use math_eval_jit::{library::Library, rpn::Program, Compiler};
 
 fn test(
     func: fn(f32, f32, f32, f32, f32, f32, &mut f32, &mut f32) -> f32,
-    in1: f32,
-    in2: f32,
-    alpha: f32,
-    beta: f32,
-    delta: f32,
-    gamma: f32,
+    x: f32,
+    y: f32,
+    a: f32,
+    b: f32,
+    c: f32,
+    d: f32,
     mut sig1: f32,
     mut sig2: f32,
 ) {
-    let res = func(in1, in2, alpha, beta, delta, gamma, &mut sig1, &mut sig2);
+    let res = func(x, y, a, b, c, d, &mut sig1, &mut sig2);
 
     println!("f(..) = {res:.4}, sig1 = {sig1:.4}, sig2 = {sig2:.4}");
 }
@@ -31,7 +31,7 @@ fn bench(func: fn(f32, f32, f32, f32, f32, f32, &mut f32, &mut f32) -> f32) {
 }
 
 fn main() {
-    let expr = "sin(sin(in1) + in2 * (pi/4))";
+    let expr = "abs(sin(x))";
 
     println!("expression: {expr}");
 

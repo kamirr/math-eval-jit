@@ -1,5 +1,5 @@
+use cranelift::module::ModuleError;
 use cranelift_codegen::{settings::SetError, CodegenError};
-use cranelift_module::ModuleError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

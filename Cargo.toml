@@ -2,12 +2,11 @@
 name = "math-eval-jit"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
-cranelift = "0.116.1"
+cranelift = { version = "0.116.1", features = ["jit", "module"] }
 cranelift-codegen = "0.116.1"
-cranelift-jit = "0.116.1"
-cranelift-module = "0.116.1"
 cranelift-native = "0.116.1"
 meval = "0.2.0"
 thiserror = "2.0.11"

@@ -4,18 +4,19 @@ pub mod rpn;
 
 use std::collections::HashMap;
 
+use cranelift::jit::{JITBuilder, JITModule};
+use cranelift::module::{Linkage, Module};
 use cranelift::prelude::{
     types::F32, AbiParam, Configurable, FunctionBuilder, FunctionBuilderContext, InstBuilder,
     MemFlags, Signature,
 };
 use cranelift_codegen::{ir, settings, Context};
-use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{Linkage, Module};
 
 use error::JitError;
 use library::Library;
 use rpn::Program;
 
+/// RPN JIT compiler
 pub struct Compiler {
     module: JITModule,
     module_ctx: Context,
@@ -24,6 +25,10 @@ pub struct Compiler {
 }
 
 impl Compiler {
+    /// New instance of the compiler
+    ///
+    /// The entries in the library are made available to the programs compiled
+    /// later on.
     pub fn new(library: &Library) -> Result<Self, JitError> {
         let flags = [
             ("use_colocated_libcalls", "false"),
@@ -68,31 +73,23 @@ impl Compiler {
         })
     }
 
+    /// Compile a [`Program`] returning a function pointer
     pub fn compile(
         &mut self,
         program: &Program,
     ) -> Result<fn(f32, f32, f32, f32, f32, f32, &mut f32, &mut f32) -> f32, JitError> {
         let ptr_type = self.module.target_config().pointer_type();
-        let param_names = [
-            "in1".to_string(),
-            "in2".to_string(),
-            "alpha".to_string(),
-            "beta".to_string(),
-            "delta".to_string(),
-            "gamma".to_string(),
-            "&sig1".to_string(),
-            "&sig2".to_string(),
+
+        self.module_ctx.func.signature.params = vec![
+            AbiParam::new(F32),
+            AbiParam::new(F32),
+            AbiParam::new(F32),
+            AbiParam::new(F32),
+            AbiParam::new(F32),
+            AbiParam::new(F32),
+            AbiParam::new(ptr_type),
+            AbiParam::new(ptr_type),
         ];
-        self.module_ctx.func.signature.params = param_names
-            .iter()
-            .map(|name| {
-                if name.starts_with("&") {
-                    AbiParam::new(ptr_type)
-                } else {
-                    AbiParam::new(F32)
-                }
-            })
-            .collect::<Vec<_>>();
         self.module_ctx.func.signature.returns = vec![AbiParam::new(F32)];
 
         let id = self.module.declare_function(
@@ -109,7 +106,7 @@ impl Compiler {
         builder.append_block_params_for_function_params(block);
         builder.switch_to_block(block);
 
-        let (v_in1, v_in2, v_alpha, v_beta, v_delta, v_gamma, v_sig1, v_sig2) = {
+        let (v_x, v_y, v_a, v_b, v_c, v_d, v_sig1, v_sig2) = {
             let params = builder.block_params(block);
             (
                 params[0], params[1], params[2], params[3], params[4], params[5], params[6],
@@ -146,12 +143,12 @@ impl Compiler {
                 Token::PushVar(var) => {
                     let val = match var {
                         // ins
-                        Var::In1 => v_in1,
-                        Var::In2 => v_in2,
-                        Var::Alpha => v_alpha,
-                        Var::Beta => v_beta,
-                        Var::Delta => v_delta,
-                        Var::Gamma => v_gamma,
+                        Var::X => v_x,
+                        Var::Y => v_y,
+                        Var::A => v_a,
+                        Var::B => v_b,
+                        Var::C => v_c,
+                        Var::D => v_d,
                         // inouts
                         Var::Sig1 => *v_sig1_rd.get_or_insert_with(|| {
                             builder.ins().load(F32, MemFlags::new(), v_sig1, 0)

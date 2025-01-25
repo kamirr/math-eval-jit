@@ -64,6 +64,18 @@ impl Default for Library {
             x.cos()
         }
 
+        extern "C" fn tan_(x: f32) -> f32 {
+            x.tan()
+        }
+
+        extern "C" fn abs_(x: f32) -> f32 {
+            x.abs()
+        }
+
+        extern "C" fn sqrt_(x: f32) -> f32 {
+            x.sqrt()
+        }
+
         extern "C" fn pow_(a: f32, b: f32) -> f32 {
             a.powf(b)
         }
@@ -72,6 +84,9 @@ impl Default for Library {
             funs: vec![
                 FunctionF32::new_1("sin".into(), sin_),
                 FunctionF32::new_1("cos".into(), cos_),
+                FunctionF32::new_1("tan".into(), tan_),
+                FunctionF32::new_1("abs".into(), abs_),
+                FunctionF32::new_1("sqrt".into(), sqrt_),
                 FunctionF32::new_2("pow".into(), pow_),
             ],
         }
