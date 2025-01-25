@@ -3,7 +3,7 @@
 use crate::error::JitError;
 
 /// RPN Token
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Token {
     /// Push a value onto the stack
     Push(Value),
@@ -20,6 +20,11 @@ pub enum Token {
     ///
     /// Replaces the top value on the stack with the result of the operation
     Unop(Unop),
+    /// Function call
+    ///
+    /// Pops a number of arguments from the stack, evaluates the function, and
+    /// pushes the result back onto the stack.
+    Function(Function),
     /// No operation
     Noop,
 }
@@ -77,19 +82,22 @@ pub enum Binop {
     Mul,
     /// Division
     Div,
-    /// Power
-    Pow,
 }
 
 /// Unary operation
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum Unop {
-    /// Sine
-    Sin,
-    /// Cosine
-    Cos,
     /// Negation
     Neg,
+}
+
+/// Function call
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct Function {
+    /// Name of the function
+    pub name: String,
+    /// Number of arguments
+    pub args: usize,
 }
 
 /// Parsed program representation
@@ -137,7 +145,10 @@ impl Program {
                     MevalOp::Minus => Token::Binop(Binop::Sub),
                     MevalOp::Times => Token::Binop(Binop::Mul),
                     MevalOp::Div => Token::Binop(Binop::Div),
-                    MevalOp::Pow => Token::Binop(Binop::Pow),
+                    MevalOp::Pow => Token::Function(Function {
+                        name: "pow".to_string(),
+                        args: 2,
+                    }),
                     _ => return Err(JitError::ParseUnknownBinop(format!("{op:?}"))),
                 },
                 MevalToken::Unary(op) => match op {
@@ -145,13 +156,13 @@ impl Program {
                     MevalOp::Minus => Token::Unop(Unop::Neg),
                     _ => return Err(JitError::ParseUnknownUnop(format!("{op:?}"))),
                 },
-                MevalToken::Func(name, Some(1)) => match name.to_lowercase().as_str() {
-                    "_1" => Token::Write(Out::Sig1),
-                    "_2" => Token::Write(Out::Sig2),
-                    "sin" => Token::Unop(Unop::Sin),
-                    "cos" => Token::Unop(Unop::Cos),
-                    _ => return Err(JitError::ParseUnknownFunc(name.to_string())),
-                },
+                MevalToken::Func(name, Some(1)) if name == "_1" => Token::Write(Out::Sig1),
+                MevalToken::Func(name, Some(1)) if name == "_2" => Token::Write(Out::Sig2),
+                MevalToken::Func(name, args) => Token::Function(Function {
+                    name,
+                    args: args.unwrap_or_default(),
+                }),
+
                 other => return Err(JitError::ParseUnknownToken(format!("{other:?}"))),
             };
 
@@ -183,8 +194,8 @@ impl Program {
             }
 
             for n in 0..self.0.len() - 1 {
-                let tok0 = self.0[n];
-                let tok1 = self.0[n + 1];
+                let tok0 = &self.0[n];
+                let tok1 = &self.0[n + 1];
 
                 let arg = match tok0 {
                     Token::Push(f) => f.value(),
@@ -192,8 +203,8 @@ impl Program {
                 };
 
                 let result = match tok1 {
-                    Token::Unop(Unop::Sin) => arg.sin(),
-                    Token::Unop(Unop::Cos) => arg.cos(),
+                    Token::Function(Function { name, args: 1 }) if name == "sin" => arg.sin(),
+                    Token::Function(Function { name, args: 1 }) if name == "cos" => arg.cos(),
                     Token::Unop(Unop::Neg) => -arg,
                     _ => continue,
                 };
@@ -208,9 +219,9 @@ impl Program {
             }
 
             for n in 0..self.0.len() - 2 {
-                let tok0 = self.0[n];
-                let tok1 = self.0[n + 1];
-                let tok2 = self.0[n + 2];
+                let tok0 = &self.0[n];
+                let tok1 = &self.0[n + 1];
+                let tok2 = &self.0[n + 2];
 
                 let (l, r) = match (tok0, tok1) {
                     (Token::Push(l), Token::Push(r)) => (l.value(), r.value()),
@@ -222,7 +233,7 @@ impl Program {
                     Token::Binop(Binop::Sub) => l - r,
                     Token::Binop(Binop::Mul) => l * r,
                     Token::Binop(Binop::Div) => l / r,
-                    Token::Binop(Binop::Pow) => l.powf(r),
+                    Token::Function(Function { name, args: 2 }) if name == "pow" => l.powf(r),
                     _ => continue,
                 };
 

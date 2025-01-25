@@ -20,6 +20,8 @@ pub enum JitError {
     ParseUnknownFunc(String),
     #[error("function not present in library `{0}`")]
     CompileUknownFunc(String),
+    #[error("function `{0}` called with {1} args, expected {2}")]
+    CompileFuncArgsMismatch(String, usize, usize),
     #[error("internal error `{0}`")]
     CompileInternal(&'static str),
     #[error("couldn't set cranelift setting: {0}")]

@@ -96,7 +96,7 @@ impl Compiler {
         self.module_ctx.func.signature.returns = vec![AbiParam::new(F32)];
 
         let id = self.module.declare_function(
-            "dsp",
+            "jit_main",
             Linkage::Export,
             &self.module_ctx.func.signature,
         )?;
@@ -126,7 +126,7 @@ impl Compiler {
                 let callee = self.module.declare_function(&name, Linkage::Import, &sig)?;
                 let fun_ref = self.module.declare_func_in_func(callee, builder.func);
 
-                tmp.insert(name.as_str(), fun_ref);
+                tmp.insert(name.as_str(), (fun_ref, sig.params.len()));
             }
 
             tmp
@@ -135,7 +135,7 @@ impl Compiler {
         let mut stack = Vec::new();
 
         for token in &program.0 {
-            use rpn::{Binop, Out, Token, Unop, Var};
+            use rpn::{Binop, Function, Out, Token, Unop, Var};
 
             match token {
                 Token::Push(v) => {
@@ -176,15 +176,6 @@ impl Compiler {
                         Binop::Sub => builder.ins().fsub(a, b),
                         Binop::Mul => builder.ins().fmul(a, b),
                         Binop::Div => builder.ins().fdiv(a, b),
-                        Binop::Pow => {
-                            let call = builder.ins().call(
-                                *extern_funs.get("pow").ok_or_else(|| {
-                                    JitError::CompileUknownFunc("pow".to_string())
-                                })?,
-                                &[a, b],
-                            );
-                            builder.inst_results(call)[0]
-                        }
                     };
 
                     stack.push(val);
@@ -195,24 +186,6 @@ impl Compiler {
                         .ok_or(JitError::CompileInternal("RPN stack exhausted"))?;
                     let val = match op {
                         Unop::Neg => builder.ins().fneg(x),
-                        Unop::Sin => {
-                            let call = builder.ins().call(
-                                *extern_funs.get("sin").ok_or_else(|| {
-                                    JitError::CompileUknownFunc("sin".to_string())
-                                })?,
-                                &[x],
-                            );
-                            builder.inst_results(call)[0]
-                        }
-                        Unop::Cos => {
-                            let call = builder.ins().call(
-                                *extern_funs.get("cos").ok_or_else(|| {
-                                    JitError::CompileUknownFunc("cos".to_string())
-                                })?,
-                                &[x],
-                            );
-                            builder.inst_results(call)[0]
-                        }
                     };
 
                     stack.push(val);
@@ -226,6 +199,34 @@ impl Compiler {
                         Out::Sig2 => v_sig2,
                     };
                     builder.ins().store(MemFlags::new(), x, ptr, 0);
+                }
+                Token::Function(Function { name, args }) => {
+                    let (func, param_n) = *extern_funs
+                        .get(name.as_str())
+                        .ok_or_else(|| JitError::CompileUknownFunc(name.clone()))?;
+
+                    // Ensure that invalid RPN won't result in an invalid function call
+                    if param_n != *args {
+                        return Err(JitError::CompileFuncArgsMismatch(
+                            name.to_string(),
+                            param_n,
+                            *args,
+                        ));
+                    }
+
+                    let mut arg_vs = Vec::new();
+                    for _ in 0..*args {
+                        let arg = *stack
+                            .last()
+                            .ok_or(JitError::CompileInternal("RPN stack exhausted"))?;
+                        arg_vs.push(arg);
+                    }
+                    arg_vs.reverse();
+
+                    let call = builder.ins().call(func, &arg_vs);
+                    let result = builder.inst_results(call)[0];
+
+                    stack.push(result);
                 }
                 Token::Noop => {}
             }
