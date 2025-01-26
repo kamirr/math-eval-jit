@@ -1,5 +1,5 @@
 use env_logger::Env;
-use math_eval_jit::{library::Library, rpn::Program, Compiler};
+use math_jit::{library::Library, rpn::Program, Compiler};
 use std::{hint, io::Write, time::Instant};
 
 fn test(

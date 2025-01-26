@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 pub mod error;
 pub mod library;
 pub mod rpn;
@@ -12,9 +14,9 @@ use cranelift::prelude::{
 };
 use cranelift_codegen::{ir, settings, Context};
 
-use error::JitError;
-use library::Library;
-use rpn::Program;
+pub use error::JitError;
+pub use library::Library;
+pub use rpn::Program;
 
 /// RPN JIT compiler
 pub struct Compiler {

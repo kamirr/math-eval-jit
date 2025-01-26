@@ -358,7 +358,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "math-eval-jit"
+name = "math-jit"
 version = "0.1.0"
 dependencies = [
  "cranelift",
