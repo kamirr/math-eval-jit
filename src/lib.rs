@@ -139,7 +139,6 @@ impl Compiler {
             match token {
                 Token::Push(v) => {
                     let val = builder.ins().f32const(v.value());
-
                     stack.push(val);
                 }
                 Token::PushVar(var) => {
@@ -159,7 +158,6 @@ impl Compiler {
                             builder.ins().load(F32, MemFlags::new(), v_sig2, 0)
                         }),
                     };
-
                     stack.push(val);
                 }
                 Token::Binop(op) => {
@@ -215,8 +213,8 @@ impl Compiler {
 
                     let mut arg_vs = Vec::new();
                     for _ in 0..*args {
-                        let arg = *stack
-                            .last()
+                        let arg = stack
+                            .pop()
                             .ok_or(JitError::CompileInternal("RPN stack exhausted"))?;
                         arg_vs.push(arg);
                     }
@@ -287,4 +285,67 @@ fn default_libcall_names() -> Box<dyn Fn(ir::LibCall) -> String + Send + Sync> {
         ir::LibCall::ElfTlsGetOffset => "__tls_get_offset".to_owned(),
         ir::LibCall::X86Pshufb => "__cranelift_x86_pshufb".to_owned(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basic() {
+        let x = 1.0f32;
+        let y = 2.0f32;
+        let a = 3.0;
+        let b = 5.0;
+        let c = 8.0;
+        let d = 13.0;
+        let sig1 = 21.0;
+        let sig2 = 34.0;
+
+        let cases = [
+            ("x", (x, sig1, sig2)),
+            ("sin(x * y)", ((x * y).sin(), sig1, sig2)),
+            ("a + b + c + d", (a + b + c + d, sig1, sig2)),
+            ("_1(a) + _2(b)", (a + b, a, b)),
+            ("_1(x) + _2(y)", (x + y, x, y)),
+            ("sin(x) + 2 * cos(y)", (x.sin() + 2.0 * y.cos(), sig1, sig2)),
+        ];
+
+        let library = Library::default();
+
+        for (code, expected) in cases {
+            let mut compiler = Compiler::new(&library).unwrap();
+
+            let parsed = Program::parse_from_infix(code).unwrap();
+            let func = compiler.compile(&parsed).unwrap();
+
+            let mut sig1_ = sig1;
+            let mut sig2_ = sig2;
+
+            let result = func(x, y, a, b, c, d, &mut sig1_, &mut sig2_);
+
+            const EPS: f32 = 0.00001;
+            assert!(
+                (result - expected.0) < EPS,
+                "{} = {}, expected {}",
+                code,
+                result,
+                expected.0
+            );
+            assert!(
+                (sig1_ - expected.1) < EPS,
+                "{} | sig1 = {}, expected {}",
+                code,
+                sig1_,
+                expected.1
+            );
+            assert!(
+                (sig2_ - expected.2) < EPS,
+                "{} | sig2 = {}, expected {}",
+                code,
+                sig2_,
+                expected.2
+            );
+        }
+    }
 }

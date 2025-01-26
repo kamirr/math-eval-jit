@@ -104,7 +104,7 @@ pub struct Function {
 ///
 /// The program is represented using Reverse Polish Notation, which is lends
 /// to easy iterative translation into CLIF as well as to simple optimizations.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub struct Program(pub Vec<Token>);
 
 impl Program {
@@ -244,5 +244,70 @@ impl Program {
         }
 
         self.0.retain(|tok| *tok != Token::Noop);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        rpn::{Token, Value},
+        Program,
+    };
+
+    use super::{Binop, Function, Unop, Var};
+
+    #[test]
+    fn test_parse() {
+        let two = || Token::Push(Value::Literal(2.0));
+
+        let cases = [
+            ("2", vec![two()]),
+            ("2 + 2", vec![two(), two(), Token::Binop(Binop::Add)]),
+            ("2 - 2", vec![two(), two(), Token::Binop(Binop::Sub)]),
+            ("2 * 2", vec![two(), two(), Token::Binop(Binop::Mul)]),
+            ("2 / 2", vec![two(), two(), Token::Binop(Binop::Div)]),
+            (
+                "2 ^ 2",
+                vec![
+                    two(),
+                    two(),
+                    Token::Function(Function {
+                        name: "pow".into(),
+                        args: 2,
+                    }),
+                ],
+            ),
+            ("-2", vec![two(), Token::Unop(Unop::Neg)]),
+            (
+                "sin(cos(tan(2)))",
+                vec![
+                    two(),
+                    Token::Function(Function {
+                        name: "tan".into(),
+                        args: 1,
+                    }),
+                    Token::Function(Function {
+                        name: "cos".into(),
+                        args: 1,
+                    }),
+                    Token::Function(Function {
+                        name: "sin".into(),
+                        args: 1,
+                    }),
+                ],
+            ),
+            ("x", vec![Token::PushVar(Var::X)]),
+            ("y", vec![Token::PushVar(Var::Y)]),
+            ("a", vec![Token::PushVar(Var::A)]),
+            ("b", vec![Token::PushVar(Var::B)]),
+            ("c", vec![Token::PushVar(Var::C)]),
+            ("d", vec![Token::PushVar(Var::D)]),
+            ("pi", vec![Token::Push(Value::Pi)]),
+            ("e", vec![Token::Push(Value::E)]),
+        ];
+
+        for (expr, tokens) in cases {
+            assert_eq!(Program::parse_from_infix(expr).unwrap(), Program(tokens));
+        }
     }
 }

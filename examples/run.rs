@@ -23,7 +23,7 @@ fn bench(func: fn(f32, f32, f32, f32, f32, f32, &mut f32, &mut f32) -> f32) {
     let mut sig1 = 0.5f32;
     let mut sig2 = 0.0f32;
     for _ in 0..44100 {
-        hint::black_box(func(2.0, 3.0, 0.0, 0.0, 0.0, 0.0, &mut sig1, &mut sig2));
+        hint::black_box(func(1.0, 2.0, 0.0, 0.0, 0.0, 0.0, &mut sig1, &mut sig2));
     }
     let elapsed = start.elapsed().as_secs_f32();
 
@@ -56,7 +56,7 @@ fn main() {
         let mut compiler = Compiler::new(&library).unwrap();
         let func = compiler.compile(&program).unwrap();
 
-        test(func, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        test(func, 1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
         bench(func);
     }
 }
