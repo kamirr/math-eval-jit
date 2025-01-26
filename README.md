@@ -1,4 +1,14 @@
 # Math-JIT
+[![Crates.io][crates-badge]][crates-url]
+[![MIT licensed][mit-badge]][mit-url]
+![CI][ci-url]
+
+[crates-badge]: https://img.shields.io/crates/v/math-jit.svg
+[crates-url]: https://crates.io/crates/math-jit
+[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+[mit-url]: https://github.com/kamirr/math-jit/blob/main/LICENSE
+[ci-url]: https://github.com/kamirr/math-jit/actions/workflows/rust.yml/badge.svg
+
 Math-JIT is a limited-scope implementation of a JIT compiler using
 [cranelift](https://cranelift.dev/). It compiles arithmetic expressions for the
 host architecture and exposes a function pointer to the result.
