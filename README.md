@@ -23,9 +23,8 @@ The expressions can utilize 8 variables, values of which are supplied by the
 caller: `x`, `y`, `a`, `b`, `c`, `d`, `sig1` and `sig2`. `sig1` and `sig2` are
 in-out variables -- they can be overriden by calling special functions `_1(..)`
 and `_2(..)`, which set the values of the two signals to that of their arguments.
-Do note that a write may override a signal before it is read, but all reads will
-observe the same value. Ordering the memory read before *all* writes is a
-possible improvement for the future.
+All reads of the signals observe the value before any writes, and the ordering
+of writes is unspecified.
 
 ## Extendability
 New 1+ argument functions can be added. Operators and syntax cannot be extended,

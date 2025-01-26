@@ -116,8 +116,22 @@ impl Compiler {
             )
         };
 
-        let mut v_sig1_rd = None;
-        let mut v_sig2_rd = None;
+        let v_sig1_rd = program.0.iter().find_map(|tok| {
+            use rpn::{Token, Var};
+            if let Token::PushVar(Var::Sig1) = tok {
+                Some(builder.ins().load(F32, MemFlags::new(), v_sig1, 0))
+            } else {
+                None
+            }
+        });
+        let v_sig2_rd = program.0.iter().find_map(|tok| {
+            use rpn::{Token, Var};
+            if let Token::PushVar(Var::Sig2) = tok {
+                Some(builder.ins().load(F32, MemFlags::new(), v_sig2, 0))
+            } else {
+                None
+            }
+        });
 
         let extern_funs = {
             let mut tmp = HashMap::new();
@@ -142,22 +156,21 @@ impl Compiler {
                     stack.push(val);
                 }
                 Token::PushVar(var) => {
-                    let val = match var {
-                        // ins
-                        Var::X => v_x,
-                        Var::Y => v_y,
-                        Var::A => v_a,
-                        Var::B => v_b,
-                        Var::C => v_c,
-                        Var::D => v_d,
-                        // inouts
-                        Var::Sig1 => *v_sig1_rd.get_or_insert_with(|| {
-                            builder.ins().load(F32, MemFlags::new(), v_sig1, 0)
-                        }),
-                        Var::Sig2 => *v_sig2_rd.get_or_insert_with(|| {
-                            builder.ins().load(F32, MemFlags::new(), v_sig2, 0)
-                        }),
-                    };
+                    let val =
+                        match var {
+                            // ins
+                            Var::X => v_x,
+                            Var::Y => v_y,
+                            Var::A => v_a,
+                            Var::B => v_b,
+                            Var::C => v_c,
+                            Var::D => v_d,
+                            // inouts
+                            Var::Sig1 => v_sig1_rd
+                                .ok_or(JitError::CompileInternal("sig1 read not prepared"))?,
+                            Var::Sig2 => v_sig2_rd
+                                .ok_or(JitError::CompileInternal("sig1 read not prepared"))?,
+                        };
                     stack.push(val);
                 }
                 Token::Binop(op) => {
@@ -309,6 +322,8 @@ mod tests {
             ("_1(a) + _2(b)", (a + b, a, b)),
             ("_1(x) + _2(y)", (x + y, x, y)),
             ("sin(x) + 2 * cos(y)", (x.sin() + 2.0 * y.cos(), sig1, sig2)),
+            ("_1(c) * 0 + sig1", (sig1, c, sig2)),
+            ("_1(1234) * 0 + sig1", (sig1, 1234.0, sig2)),
         ];
 
         let library = Library::default();
