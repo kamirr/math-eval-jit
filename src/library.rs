@@ -1,5 +1,7 @@
 //! Management of functions accessible to programs
 
+use std::mem::transmute;
+
 /// Description of a function accessible to the compiled program
 ///
 /// Currently only functions of the form `fn(f32, [f32, ..]) -> f32` are
@@ -29,6 +31,32 @@ impl FunctionF32 {
             name,
             ptr: ptr as *const u8,
             param_count: 2,
+        }
+    }
+
+    /// Call this function with 1 argument
+    ///
+    /// Returns None if parameter count is incorrect.
+    pub fn call_1(&self, x: f32) -> Option<f32> {
+        if self.param_count != 1 {
+            None
+        } else {
+            // SAFETY: param_count proves that ptr was instantiated from a
+            // function of this signature.
+            Some(unsafe { transmute::<_, extern "C" fn(f32) -> f32>(self.ptr)(x) })
+        }
+    }
+
+    /// Call this function with 2 arguments
+    ///
+    /// Returns None if parameter count is incorrect.
+    pub fn call_2(&self, x: f32, y: f32) -> Option<f32> {
+        if self.param_count != 2 {
+            None
+        } else {
+            // SAFETY: param_count proves that ptr was instantiated from a
+            // function of this signature.
+            Some(unsafe { transmute::<_, extern "C" fn(f32, f32) -> f32>(self.ptr)(x, y) })
         }
     }
 }

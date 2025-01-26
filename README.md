@@ -42,10 +42,13 @@ unapproachable for a complete beginner like myself. This project may prove more
 useful as introductory material for the codegen-related part of compilers.
 
 ## Optimizations
-After translating expressions to RPN, simple constant propagation is performed.
-If this matters to you, make sure to wrap constant sub-expressions in
-parentheses to ensure the optimization works. That is, `x*pi/4` won't currently
-optimize, but `x*(pi/4)` will.
+After translating expressions to RPN, simple constant folding is performed.
+The optimizer is capable of calling functions from the library. To ensure
+constant folding, wrap constant sub-expressions in parentheses. This is needed
+because the optimizer does *not* understand associativity:
+- (RPN) `x 1 1 + +` will optimize to `x 2 +`.
+- (RPN) `x 1 + 1 +` will not. 
+`x + 1 + 1` will produce the latter, whilst `x + (1 + 1)` -- the former. 
 
 ## Code please
 ```rust

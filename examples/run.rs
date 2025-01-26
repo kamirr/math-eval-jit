@@ -35,6 +35,8 @@ fn main() {
         .init();
 
     let mut expr = String::new();
+    let library = Library::default();
+
     loop {
         expr.clear();
 
@@ -49,10 +51,9 @@ fn main() {
         let mut program = Program::parse_from_infix(expr.as_str()).unwrap();
 
         log::debug!("parsed: {program:?}");
-        program.propagate_constants();
+        program.propagate_constants(&library);
         log::debug!("optimized: {program:?}");
 
-        let library = Library::default();
         let mut compiler = Compiler::new(&library).unwrap();
         let func = compiler.compile(&program).unwrap();
 

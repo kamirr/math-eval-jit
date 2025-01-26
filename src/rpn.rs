@@ -1,6 +1,6 @@
 //! Parsing and operations on the program
 
-use crate::error::JitError;
+use crate::{error::JitError, Library};
 
 /// RPN Token
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -181,63 +181,81 @@ impl Program {
     /// Doesn't support reordering of associative operations, so
     /// `[var, const0, add, const1, add]` is *not* replaced with
     /// `[var, add(const0, const1), add]` and so on.
-    pub fn propagate_constants(&mut self) {
+    pub fn propagate_constants(&mut self, library: &Library) {
         let mut work_done = true;
         while work_done {
             work_done = false;
 
-            if self.0.len() < 2 {
-                continue;
-            }
+            for n in 2..self.0.len() {
+                match self.0[n].clone() {
+                    Token::Unop(unop) => {
+                        let Token::Push(a) = self.0[n - 1] else {
+                            continue;
+                        };
+                        let result = match unop {
+                            Unop::Neg => -a.value(),
+                        };
 
-            for n in 0..self.0.len() - 1 {
-                let tok0 = &self.0[n];
-                let tok1 = &self.0[n + 1];
+                        self.0[n - 1] = Token::Noop;
+                        self.0[n] = Token::Push(Value::Literal(result));
+                        work_done = true;
+                    }
+                    Token::Binop(binop) => {
+                        let Token::Push(a) = self.0[n - 2] else {
+                            continue;
+                        };
+                        let Token::Push(b) = self.0[n - 1] else {
+                            continue;
+                        };
 
-                let arg = match tok0 {
-                    Token::Push(f) => f.value(),
+                        let (a, b) = (a.value(), b.value());
+                        let result = match binop {
+                            Binop::Add => a + b,
+                            Binop::Sub => a - b,
+                            Binop::Mul => a * b,
+                            Binop::Div => a / b,
+                        };
+
+                        self.0[n - 2] = Token::Noop;
+                        self.0[n - 1] = Token::Noop;
+                        self.0[n] = Token::Push(Value::Literal(result));
+                        work_done = true;
+                    }
+                    Token::Function(Function { name, args }) => {
+                        let Some(extern_fun) = library.iter().find(|f| f.name == name) else {
+                            log::warn!("No function {name} in library, compilation will fail");
+                            continue;
+                        };
+
+                        let result = match args {
+                            1 => {
+                                let Token::Push(a) = self.0[n - 1] else {
+                                    continue;
+                                };
+                                extern_fun.call_1(a.value())
+                            }
+                            2 => {
+                                let Token::Push(a) = self.0[n - 2] else {
+                                    continue;
+                                };
+                                let Token::Push(b) = self.0[n - 1] else {
+                                    continue;
+                                };
+                                extern_fun.call_2(a.value(), b.value())
+                            }
+                            _ => continue,
+                        };
+
+                        let Some(value) = result else {
+                            log::warn!("Function {name} called with invalid number of arguments, compilation will fail");
+                            continue;
+                        };
+
+                        self.0[n - args..n].fill_with(|| Token::Noop);
+                        self.0[n] = Token::Push(Value::Literal(value));
+                    }
                     _ => continue,
-                };
-
-                let result = match tok1 {
-                    Token::Function(Function { name, args: 1 }) if name == "sin" => arg.sin(),
-                    Token::Function(Function { name, args: 1 }) if name == "cos" => arg.cos(),
-                    Token::Unop(Unop::Neg) => -arg,
-                    _ => continue,
-                };
-
-                self.0[n] = Token::Noop;
-                self.0[n + 1] = Token::Push(Value::Literal(result));
-                work_done = true;
-            }
-
-            if self.0.len() < 3 {
-                continue;
-            }
-
-            for n in 0..self.0.len() - 2 {
-                let tok0 = &self.0[n];
-                let tok1 = &self.0[n + 1];
-                let tok2 = &self.0[n + 2];
-
-                let (l, r) = match (tok0, tok1) {
-                    (Token::Push(l), Token::Push(r)) => (l.value(), r.value()),
-                    _ => continue,
-                };
-
-                let result = match tok2 {
-                    Token::Binop(Binop::Add) => l + r,
-                    Token::Binop(Binop::Sub) => l - r,
-                    Token::Binop(Binop::Mul) => l * r,
-                    Token::Binop(Binop::Div) => l / r,
-                    Token::Function(Function { name, args: 2 }) if name == "pow" => l.powf(r),
-                    _ => continue,
-                };
-
-                self.0[n] = Token::Noop;
-                self.0[n + 1] = Token::Noop;
-                self.0[n + 2] = Token::Push(Value::Literal(result));
-                work_done = true;
+                }
             }
 
             self.0.retain(|tok| *tok != Token::Noop);
@@ -251,7 +269,7 @@ impl Program {
 mod tests {
     use crate::{
         rpn::{Token, Value},
-        Program,
+        Library, Program,
     };
 
     use super::{Binop, Function, Out, Unop, Var};
@@ -310,6 +328,56 @@ mod tests {
 
         for (expr, tokens) in cases {
             assert_eq!(Program::parse_from_infix(expr).unwrap(), Program(tokens));
+        }
+    }
+
+    #[test]
+    fn test_optimize() {
+        let x = |x| Token::Push(Value::Literal(x));
+
+        fn rough_compare(prog0: &Program, prog1: &Program) -> bool {
+            if prog0.0.len() != prog1.0.len() {
+                return false;
+            }
+
+            for (tok0, tok1) in prog0.0.iter().zip(prog1.0.iter()) {
+                const EPS: f32 = 0.00001;
+                match (tok0, tok1) {
+                    (Token::Push(Value::Literal(l)), Token::Push(Value::Literal(r))) => {
+                        if (l - r).abs() > EPS {
+                            return false;
+                        }
+                    }
+                    (left, right) => {
+                        if left != right {
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            true
+        }
+
+        let cases = [
+            ("2", vec![x(2.0)]),
+            ("2 + 2", vec![x(4.0)]),
+            ("2 + -2", vec![x(0.0)]),
+            ("sin(pi/2 + pi/2)", vec![x(0.0)]),
+            (
+                "sin(pi/2 + pi/2) + x",
+                vec![x(0.0), Token::PushVar(Var::X), Token::Binop(Binop::Add)],
+            ),
+        ];
+
+        for (expr, tokens) in cases {
+            let mut program = Program::parse_from_infix(expr).unwrap();
+            program.propagate_constants(&Library::default());
+            let expected = Program(tokens);
+            assert!(
+                rough_compare(&program, &expected),
+                "{program:?} != {expected:?}"
+            );
         }
     }
 }
