@@ -51,7 +51,7 @@ fn main() {
         let mut program = Program::parse_from_infix(expr.as_str()).unwrap();
 
         log::debug!("parsed: {program:?}");
-        program.propagate_constants(&library);
+        program.optimize(&library);
         log::debug!("optimized: {program:?}");
 
         let mut compiler = Compiler::new(&library).unwrap();

@@ -42,13 +42,9 @@ unapproachable for a complete beginner like myself. This project may prove more
 useful as introductory material for the codegen-related part of compilers.
 
 ## Optimizations
-After translating expressions to RPN, simple constant folding is performed.
-The optimizer is capable of calling functions from the library. To ensure
-constant folding, wrap constant sub-expressions in parentheses. This is needed
-because the optimizer does *not* understand associativity:
-- (RPN) `x 1 1 + +` will optimize to `x 2 +`.
-- (RPN) `x 1 + 1 +` will not. 
-`x + 1 + 1` will produce the latter, whilst `x + (1 + 1)` -- the former. 
+After translating expressions to RPN, simple constant folding is performed and
+variable liveliness is minimized. Functions from the library will be called
+during constant folding under the assumption that they're pure.
 
 ## Code please
 ```rust

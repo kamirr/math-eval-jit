@@ -169,104 +169,194 @@ impl Program {
         Ok(Program(prog))
     }
 
-    /// Evaluate constant expressions
+    /// Rewrites RPN into a deeper form that's more optimizable
     ///
-    /// Optimizes binary and unary operations:
-    /// - replace `[const0, const1, op]` with `[op(const0, const1)]`
-    /// - replace `[const, op]` with `[op(const)]`
+    /// The optimizer isn't able to optimize RPN like `[.. 1 + 1 +]`. This
+    /// function will replace it with `[.. 1 1 + +]`, which the optimizer
+    /// will rewrite as `[.. 2 +]`.
     ///
-    /// This operation is repeated until no progress can be made. [`Token::Noop`]
-    /// is removed in the process.
+    /// The resultant form has a deeper stack, meaning more variables need to
+    /// be kept alive at the same time.
+    pub fn reorder_ops_deepen(&mut self) {
+        for n in 2..self.0.len() {
+            let (tok0, tok1, tok2) = (
+                self.0[n - 2].clone(),
+                self.0[n - 1].clone(),
+                self.0[n].clone(),
+            );
+
+            let (ntok0, ntok1, ntok2) = match (tok0, tok1, tok2) {
+                (
+                    op1 @ Token::Binop(Binop::Add | Binop::Sub),
+                    push @ (Token::Push(_) | Token::PushVar(_)),
+                    op2 @ Token::Binop(Binop::Add | Binop::Sub),
+                ) => (push, op2, op1),
+                (
+                    op1 @ Token::Binop(Binop::Mul | Binop::Div),
+                    push @ (Token::Push(_) | Token::PushVar(_)),
+                    op2 @ Token::Binop(Binop::Mul | Binop::Div),
+                ) => (push, op2, op1),
+                _ => continue,
+            };
+
+            self.0[n - 2] = ntok0;
+            self.0[n - 1] = ntok1;
+            self.0[n] = ntok2;
+        }
+    }
+
+    /// Rewrites RPN into a form that requires a lower stack
     ///
-    /// Doesn't support reordering of associative operations, so
-    /// `[var, const0, add, const1, add]` is *not* replaced with
-    /// `[var, add(const0, const1), add]` and so on.
-    pub fn propagate_constants(&mut self, library: &Library) {
+    /// `a * (b / c)` will produce RPN `a b c / *`, which keeps up to 3 variables
+    /// alive at once. This optimization will rewrite it into RPN `a b * c /`,
+    /// which does the same work despite using less memory.
+    ///
+    /// Notably the constant folding algorithm in this library will fail to
+    /// optimize this form.
+    pub fn reorder_ops_flatten(&mut self) {
         let mut work_done = true;
         while work_done {
             work_done = false;
 
             for n in 2..self.0.len() {
-                match self.0[n].clone() {
-                    Token::Unop(unop) => {
-                        let Token::Push(a) = self.0[n - 1] else {
-                            continue;
-                        };
-                        let result = match unop {
-                            Unop::Neg => -a.value(),
-                        };
+                let (tok0, tok1, tok2) = (
+                    self.0[n - 2].clone(),
+                    self.0[n - 1].clone(),
+                    self.0[n].clone(),
+                );
 
-                        self.0[n - 1] = Token::Noop;
-                        self.0[n] = Token::Push(Value::Literal(result));
-                        work_done = true;
-                    }
-                    Token::Binop(binop) => {
-                        let Token::Push(a) = self.0[n - 2] else {
-                            continue;
-                        };
-                        let Token::Push(b) = self.0[n - 1] else {
-                            continue;
-                        };
-
-                        let (a, b) = (a.value(), b.value());
-                        let result = match binop {
-                            Binop::Add => a + b,
-                            Binop::Sub => a - b,
-                            Binop::Mul => a * b,
-                            Binop::Div => a / b,
-                        };
-
-                        self.0[n - 2] = Token::Noop;
-                        self.0[n - 1] = Token::Noop;
-                        self.0[n] = Token::Push(Value::Literal(result));
-                        work_done = true;
-                    }
-                    Token::Function(Function { name, args }) => {
-                        let Some(extern_fun) = library.iter().find(|f| f.name == name) else {
-                            log::warn!("No function {name} in library, compilation will fail");
-                            continue;
-                        };
-
-                        let result = match args {
-                            1 => {
-                                let Token::Push(a) = self.0[n - 1] else {
-                                    continue;
-                                };
-                                extern_fun.call_1(a.value())
-                            }
-                            2 => {
-                                let Token::Push(a) = self.0[n - 2] else {
-                                    continue;
-                                };
-                                let Token::Push(b) = self.0[n - 1] else {
-                                    continue;
-                                };
-                                extern_fun.call_2(a.value(), b.value())
-                            }
-                            _ => continue,
-                        };
-
-                        let Some(value) = result else {
-                            log::warn!("Function {name} called with invalid number of arguments, compilation will fail");
-                            continue;
-                        };
-
-                        self.0[n - args..n].fill_with(|| Token::Noop);
-                        self.0[n] = Token::Push(Value::Literal(value));
-                    }
+                let (ntok0, ntok1, ntok2) = match (tok0, tok1, tok2) {
+                    (
+                        push @ (Token::Push(_) | Token::PushVar(_)),
+                        op2 @ Token::Binop(Binop::Add | Binop::Sub | Binop::Mul | Binop::Div),
+                        op1 @ Token::Binop(Binop::Add | Binop::Sub | Binop::Mul | Binop::Div),
+                    ) => (op1, push, op2),
                     _ => continue,
-                }
-            }
+                };
 
-            self.0.retain(|tok| *tok != Token::Noop);
+                self.0[n - 2] = ntok0;
+                self.0[n - 1] = ntok1;
+                self.0[n] = ntok2;
+                work_done = true;
+            }
+        }
+    }
+
+    /// Evaluate some constant expressions
+    ///
+    /// Optimizes binary and unary operations:
+    /// - replace `[const0, const1, op]` with `[op(const0, const1)]`
+    /// - replace `[const, op]` with `[op(const)]`
+    ///
+    /// [`Token::Noop`] is removed in the process. Only one pass over the code
+    /// is made. Returns `false` if no further progress can be made.
+    ///
+    /// Doesn't support reordering of associative operations, so
+    /// `[var, const0, add, const1, add]` is *not* replaced with
+    /// `[var, add(const0, const1), add]` and so on.
+    pub fn fold_constants_step(&mut self, library: &Library) -> bool {
+        let mut work_done = false;
+
+        for n in 2..self.0.len() {
+            match self.0[n].clone() {
+                Token::Unop(unop) => {
+                    let Token::Push(a) = self.0[n - 1] else {
+                        continue;
+                    };
+                    let result = match unop {
+                        Unop::Neg => -a.value(),
+                    };
+
+                    self.0[n - 1] = Token::Noop;
+                    self.0[n] = Token::Push(Value::Literal(result));
+                    work_done = true;
+                }
+                Token::Binop(binop) => {
+                    let Token::Push(a) = self.0[n - 2] else {
+                        continue;
+                    };
+                    let Token::Push(b) = self.0[n - 1] else {
+                        continue;
+                    };
+
+                    let (a, b) = (a.value(), b.value());
+                    let result = match binop {
+                        Binop::Add => a + b,
+                        Binop::Sub => a - b,
+                        Binop::Mul => a * b,
+                        Binop::Div => a / b,
+                    };
+
+                    self.0[n - 2] = Token::Noop;
+                    self.0[n - 1] = Token::Noop;
+                    self.0[n] = Token::Push(Value::Literal(result));
+                    work_done = true;
+                }
+                Token::Function(Function { name, args }) => {
+                    let Some(extern_fun) = library.iter().find(|f| f.name == name) else {
+                        log::warn!("No function {name} in library, compilation will fail");
+                        continue;
+                    };
+
+                    let result = match args {
+                        1 => {
+                            let Token::Push(a) = self.0[n - 1] else {
+                                continue;
+                            };
+                            extern_fun.call_1(a.value())
+                        }
+                        2 => {
+                            let Token::Push(a) = self.0[n - 2] else {
+                                continue;
+                            };
+                            let Token::Push(b) = self.0[n - 1] else {
+                                continue;
+                            };
+                            extern_fun.call_2(a.value(), b.value())
+                        }
+                        _ => continue,
+                    };
+
+                    let Some(value) = result else {
+                        log::warn!("Function {name} called with invalid number of arguments, compilation will fail");
+                        continue;
+                    };
+
+                    self.0[n - args..n].fill_with(|| Token::Noop);
+                    self.0[n] = Token::Push(Value::Literal(value));
+                }
+                _ => continue,
+            }
         }
 
         self.0.retain(|tok| *tok != Token::Noop);
+
+        work_done
+    }
+
+    /// Rewrites RPN into a form most suitable for codegen
+    ///
+    /// Performs constant folding and minimizes stack usage of the resultant RPN.
+    ///
+    /// For details, see:
+    /// - [`Self::reorder_ops_deepen`]
+    /// - [`Self::reorder_ops_flatten`]
+    /// - [`Self::fold_constants_step`]
+    pub fn optimize(&mut self, library: &Library) {
+        let mut work_done = true;
+        while work_done {
+            self.reorder_ops_deepen();
+            work_done = self.fold_constants_step(library);
+        }
+
+        self.reorder_ops_flatten();
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::f32::consts::PI;
+
     use crate::{
         rpn::{Token, Value},
         Library, Program,
@@ -368,11 +458,43 @@ mod tests {
                 "sin(pi/2 + pi/2) + x",
                 vec![x(0.0), Token::PushVar(Var::X), Token::Binop(Binop::Add)],
             ),
+            (
+                "x + 1 + 1",
+                vec![Token::PushVar(Var::X), x(2.0), Token::Binop(Binop::Add)],
+            ),
+            (
+                "x * pi/4/3",
+                vec![
+                    Token::PushVar(Var::X),
+                    x(PI / 12.0),
+                    Token::Binop(Binop::Mul),
+                ],
+            ),
+            (
+                "a + b + c",
+                vec![
+                    Token::PushVar(Var::A),
+                    Token::PushVar(Var::B),
+                    Token::Binop(Binop::Add),
+                    Token::PushVar(Var::C),
+                    Token::Binop(Binop::Add),
+                ],
+            ),
+            (
+                "x * (a / b)",
+                vec![
+                    Token::PushVar(Var::X),
+                    Token::PushVar(Var::A),
+                    Token::Binop(Binop::Mul),
+                    Token::PushVar(Var::B),
+                    Token::Binop(Binop::Div),
+                ],
+            ),
         ];
 
         for (expr, tokens) in cases {
             let mut program = Program::parse_from_infix(expr).unwrap();
-            program.propagate_constants(&Library::default());
+            program.optimize(&Library::default());
             let expected = Program(tokens);
             assert!(
                 rough_compare(&program, &expected),
