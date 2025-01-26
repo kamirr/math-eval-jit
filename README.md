@@ -20,7 +20,7 @@ The common arithmetic operations supported by the compiler are:
   - Square root
 
 The expressions can utilize 8 variables, values of which are supplied by the
-caller: `x`, `y`, `a`, `b`, `c`, `d`, `sig1` and `sig2`. `sig1` and `sig2` are
+caller: `x`, `y`, `a`, `b`, `c`, `d`, `_1` and `_2`. `_1` and `_2` are
 in-out variables -- they can be overriden by calling special functions `_1(..)`
 and `_2(..)`, which set the values of the two signals to that of their arguments.
 All reads of the signals observe the value before any writes, and the ordering

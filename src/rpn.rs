@@ -130,8 +130,8 @@ impl Program {
                     "b" => Token::PushVar(Var::B),
                     "c" => Token::PushVar(Var::C),
                     "d" => Token::PushVar(Var::D),
-                    "sig1" => Token::PushVar(Var::Sig1),
-                    "sig2" => Token::PushVar(Var::Sig2),
+                    "_1" => Token::PushVar(Var::Sig1),
+                    "_2" => Token::PushVar(Var::Sig2),
                     "pi" => Token::Push(Value::Pi),
                     "e" => Token::Push(Value::E),
                     _ => return Err(JitError::ParseUnknownVariable(name.to_string())),
@@ -254,7 +254,7 @@ mod tests {
         Program,
     };
 
-    use super::{Binop, Function, Unop, Var};
+    use super::{Binop, Function, Out, Unop, Var};
 
     #[test]
     fn test_parse() {
@@ -279,9 +279,11 @@ mod tests {
             ),
             ("-2", vec![two(), Token::Unop(Unop::Neg)]),
             (
-                "sin(cos(tan(2)))",
+                "sin(cos(tan(_2(_1(2)))))",
                 vec![
                     two(),
+                    Token::Write(Out::Sig1),
+                    Token::Write(Out::Sig2),
                     Token::Function(Function {
                         name: "tan".into(),
                         args: 1,

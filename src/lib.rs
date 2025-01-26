@@ -322,8 +322,8 @@ mod tests {
             ("_1(a) + _2(b)", (a + b, a, b)),
             ("_1(x) + _2(y)", (x + y, x, y)),
             ("sin(x) + 2 * cos(y)", (x.sin() + 2.0 * y.cos(), sig1, sig2)),
-            ("_1(c) * 0 + sig1", (sig1, c, sig2)),
-            ("_1(1234) * 0 + sig1", (sig1, 1234.0, sig2)),
+            ("_1(c) * 0 + _1", (sig1, c, sig2)),
+            ("_1(1234) * 0 + _1", (sig1, 1234.0, sig2)),
         ];
 
         let library = Library::default();
@@ -361,6 +361,29 @@ mod tests {
                 sig2_,
                 expected.2
             );
+        }
+    }
+
+    #[test]
+    fn test_sig_behavior() {
+        let x = 1.0f32;
+        let y = 0.0f32;
+        let a = 0.0;
+        let b = 0.0;
+        let c = 0.0;
+        let d = 0.0;
+        let mut sig1 = 0.0;
+        let mut sig2 = 0.0;
+
+        let expr = "_1(_1 + x)";
+
+        let parsed = Program::parse_from_infix(expr).unwrap();
+        let mut compiler = Compiler::new(&Library::default()).unwrap();
+        let func = compiler.compile(&parsed).unwrap();
+
+        for k in 1..531 {
+            let r = func(x, y, a, b, c, d, &mut sig1, &mut sig2);
+            assert_eq!((r, sig1, sig2), (k as f32, k as f32, 0.0),)
         }
     }
 }
